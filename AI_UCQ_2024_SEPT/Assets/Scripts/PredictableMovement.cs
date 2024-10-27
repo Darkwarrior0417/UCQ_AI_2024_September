@@ -1,26 +1,27 @@
-using System.Collections;
-using System.Collections.Generic;
+using System.Drawing;
 using UnityEngine;
 
 public class PredictableMovement : SimpleMovement
 {
-
-    [SerializeField] private GameObject[] PatrolPoints;
+    [SerializeField]
+    private GameObject[] PatrolPoints;
 
     private int CurrentPatrolPoint = 0;
 
-    [SerializeField] private float PatrolPointToleranceRadius;
+    [SerializeField]
+    private float PatrolPointToleranceRadius;
 
+    [SerializeField]
+    private float DetectionRadius = 10.0f;  // Radio para detectar al jugador y activar el estado de alerta
 
     protected SimpleMovement ObjectToEvade = null;
 
-    // 2X + 3X
-    // X*(2+3)
-    // X*5
+    [SerializeField]
+    private float speed = 5.0f; // Definir speed aquí si no está en SimpleMovement
 
-    // Start is called before the first frame update
     new void Start()
     {
+        base.Start(); // Asegúrate de llamar al Start de SimpleMovement
         ObjectToEvade = FindObjectOfType<SimpleMovement>();
         if (ObjectToEvade == null)
         {
@@ -36,68 +37,60 @@ public class PredictableMovement : SimpleMovement
         }
     }
 
-    // Update is called once per frame
     void Update()
     {
-        Vector3 PredictedPosition = Vector3.zero;
         Vector3 PosToTarget = gameObject.transform.forward;
 
         if (currentEnemyState == EnemyState.Idle)
         {
-            // Tenemos que definir un área de aceptación/tolerancia de "ya llegué, ¿cuál sigue?" 
-            // Queremos checar si la distancia entre el punto de patrullaje actual y nuestro agente es menor o igual que 
-            // un radio de tolerancia.
-            if (Utilities.Utility.IsInsideRadius(PatrolPoints[CurrentPatrolPoint].transform.position, transform.position,
-                    PatrolPointToleranceRadius))
+            // Detectar al jugador y cambiar a estado de alerta si está dentro del radio de detección
+            float distanceToPlayer = Vector3.Distance(transform.position, ObjectToEvade.transform.position);
+            if (distanceToPlayer <= DetectionRadius)
             {
-                // Si estamos dentro, entonces ya llegamos y ya nos podemos ir hacia el siguiente punto de patrullaje.
-                CurrentPatrolPoint++;
-                if (CurrentPatrolPoint >= PatrolPoints.Length)
-                {
-                    currentEnemyState = EnemyState.Alert;
-                    Debug.Log("Pasé al estado de alerta.");
-                }
-
-                CurrentPatrolPoint %= PatrolPoints.Length;
-
-                // 0 % 4 = 0
-                // 1 % 4 = 1
-                // 2 % 4 = 2
-                // 3 % 4 = 3
-                // 4 % 4 = 0
-                // 5 % 4 = 1
-
-                // La otra forma sería usando un if
-                // Si nuestro contador "CurrentPatrolPoints" es mayor o igual que el número de elementos en el arreglo "PatrolPoints"
-                // if (CurrentPatrolPoint >= PatrolPoints.Length)
-                // {
-                //     // Entonces lo reseteamos a 0.
-                //     CurrentPatrolPoint = 0;
-                // }
+                currentEnemyState = EnemyState.Alert;
+                Debug.Log("Jugador detectado, cambiando a estado de alerta.");
             }
-
-            // Hacemos que nuestro agente haga Seek a los puntos de patrullaje
-            // Será al punto de patrullaje al cual estemos yendo actualmente.
-            PosToTarget = PuntaMenosCola(PatrolPoints[CurrentPatrolPoint].transform.position, transform.position); // SEEK
-
+            else
+            {
+                // Patrullar entre los puntos de patrullaje si no está en alerta
+                if (Utilities.Utility.IsInsideRadius(PatrolPoints[CurrentPatrolPoint].transform.position, transform.position, PatrolPointToleranceRadius))
+                {
+                    CurrentPatrolPoint++;
+                    if (CurrentPatrolPoint >= PatrolPoints.Length)
+                    {
+                        CurrentPatrolPoint = 0;
+                    }
+                }
+                PosToTarget = PuntaMenosCola(PatrolPoints[CurrentPatrolPoint].transform.position, transform.position);
+            }
         }
         else if (currentEnemyState == EnemyState.Alert)
         {
-            // si estamos en el estado de alerta vamos a hacer otra cosa, que es evadir al ObjectToEvade.
-            PosToTarget = Evade(ObjectToEvade.transform.position, ObjectToEvade.Velocity);
+            // Evadir al ObjectToEvade si estamos en estado de alerta
+            PosToTarget = Evade(ObjectToEvade.transform.position, ObjectToEvade.Velocity); // Cambia 'velocity' por 'Velocity'
         }
 
+        // Movimiento hacia el objetivo calculado
+        MoveTowardsTarget(PosToTarget);
+    }
 
-        Velocity += PosToTarget.normalized * MaxAcceleration * Time.deltaTime;
+    private void MoveTowardsTarget(Vector3 targetDirection)
+    {
+        transform.position += targetDirection.normalized * speed * Time.deltaTime;
+        transform.forward = targetDirection.normalized;
+    }
 
-        // Queremos que lo más rápido que pueda ir sea a MaxSpeed unidades por segundo. Sin importar qué tan grande sea la
-        // flecha de PosToTarget.
-        // Como la magnitud y la dirección de un vector se pueden separar, únicamente necesitamos limitar la magnitud para
-        // que no sobrepase el valor de MaxSpeed.
-        Velocity = Vector3.ClampMagnitude(Velocity, MaxSpeed);
+    private Vector3 Evade(Vector3 targetPosition, Vector3 targetVelocity)
+    {
+        // Implementa la lógica de evasión aquí. Por ejemplo:
+        Vector3 directionToTarget = transform.position - targetPosition;
+        float distanceToTarget = directionToTarget.magnitude;
 
-        transform.position += Velocity * Time.deltaTime;
-    } 
-
-
+        // Calcula la dirección de evasión (ajusta la lógica según sea necesario)
+        if (distanceToTarget > 0)
+        {
+            return directionToTarget / distanceToTarget * speed; // Ajusta la velocidad
+        }
+        return Vector3.zero; // Si estás en la misma posición, no te muevas
+    }
 }
